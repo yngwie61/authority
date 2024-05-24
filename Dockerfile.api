@@ -1,0 +1,6 @@
+FROM python:3.9-slim
+WORKDIR /app
+COPY api_server.py .
+COPY certs /app/certs
+RUN pip install flask pyjwt requests jwcrypto
+CMD ["python", "api_server.py"]

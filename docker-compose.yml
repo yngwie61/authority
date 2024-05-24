@@ -1,0 +1,35 @@
+version: '3'
+services:
+  auth_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./certs:/app/certs
+    networks:
+      default:
+        aliases:
+          - auth_server.local
+  api_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./certs:/app/certs
+    networks:
+      default:
+        aliases:
+          - api_server.local
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    depends_on:
+      - auth_server
+      - api_server
+    volumes:
+      - ./certs:/app/certs
