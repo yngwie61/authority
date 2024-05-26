@@ -18,7 +18,7 @@ public_pem_key = key.export_to_pem(private_key=False, password=None)
 private_pem_key = key.export_to_pem(private_key=True, password=None)
 key_dict = {}
 key_dict[key.kid] = {"pub":public_pem_key, "pri":private_pem_key}
-jwks = {"keys": [json.dumps(public_key)]}
+jwks = {"keys": [public_key]}
 
 # access token のヘッダー設定
 access_token_header = {
@@ -145,4 +145,4 @@ def introspect():
 if __name__ == '__main__':
     context = ssl.SSLContext(ssl.PROTOCOL_TLS)
     context.load_cert_chain(certfile='certs/auth_server.crt', keyfile='certs/auth_server.key')
-    app.run(host='0.0.0.0', port=5002, ssl_context=context)
+    app.run(host='0.0.0.0', port=5002, ssl_context=context, debug=True)
