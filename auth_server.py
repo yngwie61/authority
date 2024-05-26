@@ -6,8 +6,10 @@ import hashlib
 import base64
 import ssl
 import json
+import logging
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 
 # JWKセットを生成
 key = jwk.JWK.generate(kty='RSA', size=2048)
@@ -27,17 +29,24 @@ access_token_header = {
     "typ": "JWT"
 }
 
-# Mock data
+TENANT_DOMAIN = "https://auth_server.local:5002"
+ISSUER = "https://auth_server.local:5002/"
+
+# Client Application Settings
 clients = {
-    "client_id": {
-        "scope": "secure-data:read",
+    "app1": {
+        "iss": ISSUER,
         "aud": ["https://api_server.local:5001"],
         "redirect_uri": "https://client.local:5003/callback"
     }
 }
 
+# User Settings
 users = {
-    "user": "password"
+    "user1": {
+        "password": "password",
+        "permissions": ["secure-data:read"]
+    }
 }
 
 codes = {}  # Store the authorization codes along with code challenges for PKCE
@@ -47,6 +56,23 @@ def generate_code_challenge(code_verifier):
         hashlib.sha256(code_verifier.encode()).digest()
     ).decode('utf-8').replace('=', '')
     return code_challenge
+
+@app.route('/.well-known/openid-configuration')
+def openid_configuration():
+    config = {
+        "issuer": ISSUER,
+        "authorization_endpoint": f"{TENANT_DOMAIN}/authorize",
+        "token_endpoint": f"{TENANT_DOMAIN}/token",
+        "jwks_uri": f"{TENANT_DOMAIN}/.well-known/jwks.json",
+        "response_types_supported": ["code", "token", "id_token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "scopes_supported": ["openid", "profile"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "claims_supported": ["sub", "iss", "aud", "exp", "iat", "name"]
+    }
+    return jsonify(config)
+
 
 @app.route('/.well-known/jwks.json')
 def jwks_endpoint():
@@ -80,9 +106,17 @@ def login():
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method')
 
-    if username in users and users[username] == password:
+    if username in users and users[username]["password"] == password:
+        access_token_payload = {
+            "iat": datetime.datetime.utcnow(),
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=10),
+            "scope": "",
+            "aud": clients[client_id]["aud"],
+            "iss": clients[client_id]["iss"],
+            "permissions": users[username]["permissions"]
+        }
         code = jwt.encode({"username": username, "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=3)}, "secret", algorithm="HS256")
-        codes[code] = {"code_challenge": code_challenge, "code_challenge_method": code_challenge_method}
+        codes[code] = {"code_challenge": code_challenge, "code_challenge_method": code_challenge_method, "payload": access_token_payload}
         return redirect(f"{redirect_uri}?code={code}&state={state}")
 
     return jsonify({"error": "Invalid credentials"}), 401
@@ -103,15 +137,8 @@ def token():
             if expected_code_challenge != code_challenge:
                 return jsonify({"error": "Invalid code verifier"}), 401
         
+        access_token_payload = codes[code]['payload']
         del codes[code]  # Remove used code
-        access_token_payload = {
-            "username": "test_client",
-            "iat": datetime.datetime.utcnow(),
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=10),
-            "scope": "secure-data:read",
-            "aud": ["https://api_server.local:5001"],
-            "iss": "https://auth_server.local:5002"
-        }
         access_token = jwt.encode(access_token_payload, private_pem_key, algorithm="RS256", headers=access_token_header)
         return jsonify({"access_token": access_token})
 
@@ -132,7 +159,6 @@ def introspect():
                 token_data = jwt.decode(token, public_pem_key, algorithms=[header_json["alg"]], options={"verify_aud": False})
                 return jsonify({
                     'active': True,
-                    'username': token_data['username'],
                     'exp': token_data['exp']
                 })
         except jwt.ExpiredSignatureError:

@@ -28,7 +28,7 @@ code_challenge = generate_code_challenge(code_verifier)
 authorize_url = 'https://auth_server.local:5002/authorize'
 authorize_params = {
     'response_type': 'code',
-    'client_id': 'client_id',
+    'client_id': 'app1',
     'redirect_uri': 'https://client.local:5003/callback',
     'code_challenge': code_challenge,
     'code_challenge_method': 'S256',
@@ -44,7 +44,7 @@ soup = bs4.BeautifulSoup(response.text, 'html.parser')
 form = soup.find('form')
 login_url = f"https://auth_server.local:5002{form.get('action')}"
 login_data = {
-    'username': 'user',
+    'username': 'user1',
     'password': 'password'
 }
 
@@ -62,7 +62,7 @@ token_data = {
     'grant_type': 'authorization_code',
     'code': auth_code,
     'redirect_uri': 'https://client.local:5003/callback',
-    'client_id': 'client_id',
+    'client_id': 'app1',
     'code_verifier': code_verifier
 }
 
