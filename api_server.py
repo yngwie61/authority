@@ -11,31 +11,40 @@ app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
 AUTH_SERVER_INTROSPECTION_ENDPOINT = "https://auth_server:5002/introspect"
-AUTH_SERVER_JWKS_ENDPOINT = "https://auth_server.local:5002/.well-known/jwks.json"
-CLIENT_ID = "client_id"
+AUTH_SERVER_OPENID_CONFIGURATION_PATH = ".well-known/openid-configuration"
+CLIENT_ID = "app1"
+API_ENDPOINT = "https://api_server.local:5001"
 
 def validate_inclueded_meta(access_token):
     try:
-        header_b64, payload_b64, signature_b64 = access_token.split(".")
-        header = base64.b64decode(header_b64)
-        header_json = json.loads(header.decode('utf-8'))
-        
+        header_json = jwt.get_unverified_header(access_token)
+        payload_json = jwt.decode(access_token, options={"verify_signature": False})
+
     except Exception as e:
         return None
 
     try:
-        response = requests.get(AUTH_SERVER_JWKS_ENDPOINT, verify='certs/ca.crt')
-        if not response.status_code == 200:
+        iss = payload_json["iss"]
+        AUTH_SERVER_OPENID_CONFIGURATION_URL = iss + AUTH_SERVER_OPENID_CONFIGURATION_PATH
+        openid_configuration_response = requests.get(AUTH_SERVER_OPENID_CONFIGURATION_URL, verify='certs/ca.crt')
+        if not openid_configuration_response.status_code == 200:
             return None
-        jwks = response.json()
+        openid_configurations = openid_configuration_response.json()
+        app.logger.info(openid_configurations)
+        jwks_uri_response = requests.get(openid_configurations["jwks_uri"], verify='certs/ca.crt')
+        if not jwks_uri_response.status_code == 200:
+            return None
+        jwks = jwks_uri_response.json()
         if not jwks.get("keys"):
             return None
-        # app.logger.info(jwks["keys"][0])
         for jwk_json in jwks["keys"]:
             jwk_key = jwk.JWK.from_json(jwk_json)
             if jwk_key.kid == header_json["kid"]:
-                # JWTの署名を検証する
                 public_pem_key = jwk_key.export_to_pem(private_key=False, password=None)
+                if not API_ENDPOINT in payload_json["aud"]:
+                    app.logger.error(f"Audience not included: {API_ENDPOINT}")
+                    raise jwt.InvalidTokenError
+                
                 decoded_token= jwt.decode(access_token, public_pem_key, algorithms=[header_json["alg"]], options={"verify_aud": False})
                 return decoded_token
 
@@ -74,6 +83,7 @@ def secure_data():
 
     access_token = parts[1]
     verified_token = validate_inclueded_meta(access_token)
+    app.logger.info(verified_token)
     if not verified_token:
         return jsonify({"message": "Invalid token"}), 401
 
