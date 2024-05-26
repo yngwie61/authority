@@ -107,16 +107,9 @@ def login():
     code_challenge_method = request.args.get('code_challenge_method')
 
     if username in users and users[username]["password"] == password:
-        access_token_payload = {
-            "iat": datetime.datetime.utcnow(),
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=10),
-            "scope": "",
-            "aud": clients[client_id]["aud"],
-            "iss": clients[client_id]["iss"],
-            "permissions": users[username]["permissions"]
-        }
+        authorized_user_info = users[username]
         code = jwt.encode({"username": username, "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=3)}, "secret", algorithm="HS256")
-        codes[code] = {"code_challenge": code_challenge, "code_challenge_method": code_challenge_method, "payload": access_token_payload}
+        codes[code] = {"code_challenge": code_challenge, "code_challenge_method": code_challenge_method, "authorized_user_info": authorized_user_info}
         return redirect(f"{redirect_uri}?code={code}&state={state}")
 
     return jsonify({"error": "Invalid credentials"}), 401
@@ -136,8 +129,15 @@ def token():
             expected_code_challenge = generate_code_challenge(code_verifier)
             if expected_code_challenge != code_challenge:
                 return jsonify({"error": "Invalid code verifier"}), 401
-        
-        access_token_payload = codes[code]['payload']
+
+        access_token_payload = {
+            "iat": datetime.datetime.utcnow(),
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=10),
+            "scope": "",
+            "aud": clients[client_id]["aud"],
+            "iss": clients[client_id]["iss"],
+            "permissions": codes[code]["authorized_user_info"]["permissions"]
+        }
         del codes[code]  # Remove used code
         access_token = jwt.encode(access_token_payload, private_pem_key, algorithm="RS256", headers=access_token_header)
         return jsonify({"access_token": access_token})

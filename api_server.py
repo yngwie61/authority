@@ -42,9 +42,13 @@ def validate_inclueded_meta(access_token):
             if jwk_key.kid == header_json["kid"]:
                 public_pem_key = jwk_key.export_to_pem(private_key=False, password=None)
                 if not API_ENDPOINT in payload_json["aud"]:
-                    app.logger.error(f"Audience not included: {API_ENDPOINT}")
+                    app.logger.error(f"Audience does not includedes: {API_ENDPOINT}")
                     raise jwt.InvalidTokenError
                 
+                if not "secure-data:read" in payload_json["permissions"]:
+                    app.logger.error(f"Permissions does not includes read role")
+                    raise jwt.InvalidTokenError              
+
                 decoded_token= jwt.decode(access_token, public_pem_key, algorithms=[header_json["alg"]], options={"verify_aud": False})
                 return decoded_token
 
