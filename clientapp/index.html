@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Auth0 OIDC Example</title>
+    <style>
+        .profile-container {
+            display: flex;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .profile-pic {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .profile-info {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+    <script>
+        const AUTH0_DOMAIN = '';
+        const CLIENT_ID = '';
+        const REDIRECT_URI = 'http://localhost:8000/example/';
+        const AUTH0_AUDIENCE = 'https://localhost:5001/secure-data';
+
+        function login() {
+            const authUrl = `https://${AUTH0_DOMAIN}/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=openid%20profile%20email&audience=${AUTH0_AUDIENCE}`;
+            window.location.href = authUrl;
+        }
+
+        async function handleAuth() {
+            const code = new URLSearchParams(window.location.search).get('code');
+            if (code) {
+                const tokenResponse = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        grant_type: 'authorization_code',
+                        client_id: CLIENT_ID,
+                        code: code,
+                        redirect_uri: REDIRECT_URI
+                    })
+                });
+                const tokens = await tokenResponse.json();
+                
+                // ローカルストレージにaccess_tokenとid_tokenを保存
+                localStorage.setItem('access_token', tokens.access_token);
+                localStorage.setItem('id_token', tokens.id_token);
+
+                const userInfoResponse = await fetch(`https://${AUTH0_DOMAIN}/userinfo`, {
+                    headers: {
+                        'Authorization': `Bearer ${tokens.access_token}`
+                    }
+                });
+                const userInfo = await userInfoResponse.json();
+                displayUserInfo(userInfo);
+            } else {
+                const idToken = localStorage.getItem('id_token');
+                if (idToken) {
+                    try {
+                        const userInfoResponse = await fetch(`https://${AUTH0_DOMAIN}/userinfo`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                            }
+                        });
+                        const userInfo = await userInfoResponse.json();
+                        displayUserInfo(userInfo);
+                    } catch (error) {
+                        console.error('Invalid token or error fetching user info:', error);
+                    }
+                }
+            }
+        }
+
+        function displayUserInfo(userInfo) {
+            const userInfoContainer = document.getElementById('user-info');
+            userInfoContainer.innerHTML = `
+                <div class="login-status">
+                    ログイン済み
+                </div>
+                <div class="profile-container">
+                    <img class="profile-pic" src="${userInfo.picture}" alt="Profile Picture">
+                    <div class="profile-info">
+                        <span>${userInfo.name}</span>
+                        <span>${userInfo.email}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.onload = handleAuth;
+    </script>
+</head>
+<body>
+    <h1>Auth0 OIDC Example</h1>
+    <button onclick="login()">Login with Auth0</button>
+    <div id="user-info"></div>
+</body>
+</html>
