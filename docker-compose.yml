@@ -12,6 +12,9 @@ services:
       default:
         aliases:
           - auth_server.local
+    depends_on:
+      - db_server
+
   api_server:
     build:
       context: .
@@ -24,6 +27,7 @@ services:
       default:
         aliases:
           - api_server.local
+
   client:
     build:
       context: .
@@ -33,3 +37,26 @@ services:
       - api_server
     volumes:
       - ./certs:/app/certs
+
+  db_server:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: authdb
+      MYSQL_USER: authoperator
+      MYSQL_PASSWORD: authoperatorpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      default:
+        aliases:
+          - db_server.local
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  db_data:
